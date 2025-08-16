@@ -23,7 +23,7 @@ USER popkorn
 ENV VIRTUALENVWRAPPER_PYTHON=/usr/bin/python3
 RUN /bin/bash -c "source /usr/local/bin/virtualenvwrapper.sh && \
     mkvirtualenv popkorn && \
-    pip install angr==9.2.18 ipython==8.5.0 ipdb==0.13.9"
+    pip install angr==9.2.18 ipython==8.5.0 ipdb==0.13.9 capstone==5.0.6"
 
 RUN mkdir /home/popkorn/popkorn
 COPY ./datasets /home/popkorn/popkorn/datasets/

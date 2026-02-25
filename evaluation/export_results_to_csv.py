@@ -1,13 +1,15 @@
 from collections import defaultdict
 import glob
 import os
+import re
 import sys
 import csv
 import angr
 from pathlib import Path
 from util import fully_normalized_drivername
 
-MSG_NO_IMPORTS_FOUND = b'''Looking for MmMapIoSpace, ZwOpenProcess, ZwMapViewOfSection Imports..
+# Legacy message pattern (old angr_full_blown.py)
+MSG_NO_IMPORTS_FOUND_LEGACY = b'''Looking for MmMapIoSpace, ZwOpenProcess, ZwMapViewOfSection Imports..
 
 ZwOpenProcess import not found!
 
@@ -16,6 +18,24 @@ MmMapIoSpace import not found!
 ZwMapViewOfSection import not found!
 '''
 MSG_NO_DRIVERENTRY = b'Could not find a successful DriverEntry run!!!'
+
+
+def has_no_sinks_found(stdout):
+    """Check if the analysis output indicates no sink imports were found.
+    Handles both old and new angr_full_blown.py output formats."""
+    if MSG_NO_IMPORTS_FOUND_LEGACY in stdout:
+        return True
+    # New format: check if all 3 original sinks were not found and no Boom! was produced
+    if (b'ZwOpenProcess import not found!' in stdout and
+        b'MmMapIoSpace import not found!' in stdout and
+        b'ZwMapViewOfSection import not found!' in stdout and
+        b'Boom!' not in stdout):
+        return True
+    return False
+
+RE_BOOM_HANDLE_LEAK = re.compile(rb'\[\+\] Boom! HandleLeak:')
+RE_BOOM_HANDLE_EXPOSURE = re.compile(rb'\[\+\] Boom! HandleExposure:')
+RE_BOOM_RW_PRIMITIVE = re.compile(rb'\[\+\] Boom! RWPrimitive:')
 
 
 GLOB = sys.argv[1]
@@ -38,8 +58,11 @@ for analysis_run_complete in glob.iglob(os.path.join(GLOB, 'complete.json')):
         DRIVER_NAME = driver_results_dir.name
         driver_names.add(DRIVER_NAME)
 
+        status_file = driver_results_dir / 'status'
+        if not status_file.exists():
+            continue  # skip incomplete result dirs (runner crashed mid-flight)
         flagged = (driver_results_dir / 'vulnerable').is_file()
-        with open(driver_results_dir / 'status', 'r') as f:
+        with open(status_file, 'r') as f:
             status = f.read()
         if os.path.exists(driver_results_dir / 'stdout'):
             with open(driver_results_dir / 'stdout', 'rb') as f:
@@ -57,14 +80,22 @@ for analysis_run_complete in glob.iglob(os.path.join(GLOB, 'complete.json')):
             msg = 'timeout'
         elif driver_results_dir.name.startswith("CITMDRV_IA64_"):
             msg = 'unsupported architecture: ia64'
-        elif MSG_NO_IMPORTS_FOUND in stdout:
+        elif has_no_sinks_found(stdout):
             msg = 'no sinks found'
         # elif MSG_NO_DRIVERENTRY in stdout:
         #     msg = 'could not locate ioctl handler'
+
+        handle_leak_count = len(RE_BOOM_HANDLE_LEAK.findall(stdout))
+        handle_exposure_count = len(RE_BOOM_HANDLE_EXPOSURE.findall(stdout))
+        rw_primitive_count = len(RE_BOOM_RW_PRIMITIVE.findall(stdout))
+
         per_driver_results[DRIVER_NAME][ANALYSIS_ID] = {
             'driver': driver_results_dir.name,
             'analysis': msg,
             'time_taken': time_taken,
+            'handle_leak_count': handle_leak_count,
+            'handle_exposure_count': handle_exposure_count,
+            'rw_primitive_count': rw_primitive_count,
         }
 
 fieldnames = ['driver_name', 'normalized_driver_name']
@@ -72,7 +103,7 @@ fieldnames = ['driver_name', 'normalized_driver_name']
 ANALYSIS_KEYS = list(sorted(analyses))
 DRIVER_KEYS = list(sorted(driver_names))
 for key in ANALYSIS_KEYS:
-    fieldnames += [key, key + '_time_taken']
+    fieldnames += [key, key + '_time_taken', key + '_handle_leak_count', key + '_handle_exposure_count', key + '_rw_primitive_count']
 
 with open('results.csv', 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
@@ -82,5 +113,7 @@ with open('results.csv', 'w', newline='') as csvfile:
         driver_results = per_driver_results[driver_name]
         row = [driver_name.replace(',', '_'), norm]
         for analysis in ANALYSIS_KEYS:
-            row += [driver_results[analysis]['analysis'], driver_results[analysis]['time_taken']]
+            r = driver_results[analysis]
+            row += [r['analysis'], r['time_taken'], r['handle_leak_count'], r['handle_exposure_count'], r['rw_primitive_count']]
+        writer.writerow(row)
 

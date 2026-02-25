@@ -26,7 +26,9 @@ RUN /bin/bash -c "source /usr/local/bin/virtualenvwrapper.sh && \
     pip install angr==9.2.18 ipython==8.5.0 ipdb==0.13.9 capstone==5.0.6"
 
 RUN mkdir /home/popkorn/popkorn
-COPY ./datasets /home/popkorn/popkorn/datasets/
+# datasets/ is large and volume-mounted at runtime via docker-compose.
+# Create an empty placeholder so the directory exists in the image.
+RUN mkdir -p /home/popkorn/popkorn/datasets
 COPY ./angr_analysis /home/popkorn/popkorn/angr_analysis/
 COPY ./evaluation /home/popkorn/popkorn/evaluation/
 USER root

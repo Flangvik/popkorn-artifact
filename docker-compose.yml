@@ -1,0 +1,25 @@
+services:
+  popkorn:
+    build: .
+    # Mount source directories so the updated code is always used.
+    # These bind-mounts shadow what the Dockerfile COPYs at build time,
+    # so you never need to rebuild just because a .py file changed.
+    volumes:
+      - ./angr_analysis:/home/popkorn/popkorn/angr_analysis
+      - ./evaluation:/home/popkorn/popkorn/evaluation
+      - ./datasets:/home/popkorn/popkorn/datasets
+    working_dir: /home/popkorn/popkorn/evaluation
+    # Analysis pipeline (filtered dataset already exists, skip re-filtering):
+    #   1. Analyse dp_drivers_pack_extended_sinks_signed: 16 parallel workers, 5-min timeout
+    #   2. Export results summary CSV
+    #   3. Print which sinks/vuln categories fired
+    command: >
+      /bin/bash -c "
+        source /usr/local/bin/virtualenvwrapper.sh && workon popkorn &&
+        echo '[*] Running analysis on filtered dataset...' &&
+        python -u runner_analysis.py --parallel 16 --timeout 300 dp_drivers_pack_extended_sinks_signed &&
+        echo '[*] Exporting results CSV...' &&
+        python export_results_to_csv.py './results_dp_drivers_pack_extended_sinks_signed_timeout300_run*/' &&
+        echo '[*] Computing triggered sinks and vuln categories...' &&
+        python evaluate_compute_bug_types.py './results_dp_drivers_pack_extended_sinks_signed_timeout300_*'
+      "

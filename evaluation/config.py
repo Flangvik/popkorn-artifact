@@ -7,7 +7,7 @@ DATASETS_DIR = POPKORN_DIR / 'datasets'
 
 
 def dir_getter(dir_path: Path):
-    yield from dir_path.glob('*.sys')
+    yield from sorted(dir_path.glob('*.sys'), key=lambda p: p.stat().st_size)
 
 CONFIGS = {}
 for f in DATASETS_DIR.iterdir():

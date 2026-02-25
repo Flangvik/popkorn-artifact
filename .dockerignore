@@ -1,0 +1,13 @@
+# Exclude large/generated files from the Docker build context.
+# datasets/ and evaluation/ are volume-mounted at runtime anyway.
+datasets/dp_drivers_raw/
+datasets/dp_drivers_raw_extended_sinks_only/
+datasets/dp_drivers_raw_missed/
+datasets/dp_drivers_pack/
+datasets/dp_drivers_pack_extended_sinks_signed/
+datasets/physmem_drivers/
+datasets/physmem_drivers_imports_only/
+datasets/popkorn_drivers_with_extended_sinks_only/
+evaluation/results_*
+memory/
+.git/
